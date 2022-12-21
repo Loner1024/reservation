@@ -1,105 +1,39 @@
-# Core Reservation
+# Feature
 
-- Feature Name: core-reservation
-- Start Date: 2022-12-21
+- Feature Name: (fill me in with a unique ident, `my_awesome_feature`)
+- Start Date: (fill me in with today's date, YYYY-MM-DD)
 
 ## Summary
 
-A core reservation service that solves the problem of reserving a resource for a period of time. We Leverage postgres
-EXCLUDE constraints to ensure that only one reservat ion can be made for a given resource at a given time.
+[summary]: #summary
+
 One paragraph explanation of the feature.
 
 ## Motivation
 
-We need a common solution for various reservation requirements: 1) calendar booking; 2) hotel/room booking;3) meeting
-room booking; 4 parking lot booking; 5) etc. Repeatedly build ing features for these requirements 1S a waste
-of time and resources. We should have a common solution that can be used by all teams.
+[motivation]: #motivation
+
+Why are we doing this? What use cases does it support? What is the expected outcome?
 
 ## Guide-level explanation
 
-## Service interface
+[guide-level-explanation]: #guide-level-explanation
 
-We would use gRPC as a service interface. Be low is the proto definition:
+Explain the proposal as if it was already included in the language and you were teaching it to another Rust programmer.
+That generally means:
 
-```protobuf
-syntax = 'proto3';
+- Introducing new named concepts.
+- Explaining the feature largely in terms of examples.
+- Explaining how Rust programmers should *think* about the feature, and how it should impact the way they use Rust. It
+  should explain the impact as concretely as possible.
+- If applicable, provide sample error messages, deprecation warnings, or migration guidance.
+- If applicable, describe the differences between teaching this to existing Rust programmers and new Rust programmers.
+- Discuss how this impacts the ability to read, understand, and maintain Rust code. Code is read and modified far more
+  often than written; will the proposed feature make code easier to maintain?
 
-enum ReservationStatus {
-  UNKNOWN = 0;
-  PENDING = 1;
-  CONFIRMED = 2;
-  BLOCKED = 3;
-}
-
-message Reservation {
-  string id = 1;
-  string user_id = 2;
-  ReservationStatus status = 3;
-
-  string resource_id = 4;
-  google.protobuf.Timestamp start = 5;
-  google.protobuf.Timestamp end = 6;
-
-  string note = 7;
-}
-
-message ReserveRequest {
-  Reservation reservation = 1;
-}
-
-message ReserveResponse {
-  Reservation reservation = 1;
-}
-
-message UpdateRequest {
-  string note = 1;
-}
-
-message UpdateResponse {
-  Reservation reservation = 1;
-}
-
-message ConfirmRequest {
-  string id = 1;
-}
-
-message ConfirmResponse {
-  Reservation reservation = 1;
-}
-
-message CancelRequest {
-  string id = 1;
-}
-
-message CancelResponse {
-  Reservation reservation = 1;
-}
-
-message GetRequest {
-  string id = 1;
-}
-
-message GetResponse {
-  Reservation reservation = 1;
-}
-
-message QueryRequest {
-  string resource_id = 1;
-  string user_id = 2;
-  ReservationStatus status = 3;
-  google.protobuf.Timestamp start = 4;
-  google. protobuf.Timestamp end = 5;
-}
-
-service ReservationService {
-  rpc Reserve(ReserveRequest) returns (ReserveResponse);
-  rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
-  rpc Update(UpdateRequest) returns (UpdateResponse);
-  rpc Cancel(CancelRequest) returns (CancelResponse);
-  rpc Get(GetRequest) returns (GetResponse);
-  rpc Query(QueryRequest) returns (stream Reservation);
-}
-```
+For implementation-oriented RFCs (e.g. for compiler internals), this section should focus on how compiler contributors
+should think about the change, and give examples of its concrete impact. For policy RFCs, this section should provide an
+example-driven introduction to the policy, and explain its impact in concrete terms.
 
 ## Reference-level explanation
 

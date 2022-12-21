@@ -1,39 +1,178 @@
-# Feature
+# Core Reservation
 
-- Feature Name: (fill me in with a unique ident, `my_awesome_feature`)
-- Start Date: (fill me in with today's date, YYYY-MM-DD)
+- Feature Name: core-reservation
+- Start Date: 2022-12-21
 
 ## Summary
 
-[summary]: #summary
-
+A core reservation service that solves the problem of reserving a resource for a period of time. We Leverage postgres
+EXCLUDE constraints to ensure that only one reservat ion can be made for a given resource at a given time.
 One paragraph explanation of the feature.
 
 ## Motivation
 
-[motivation]: #motivation
-
-Why are we doing this? What use cases does it support? What is the expected outcome?
+We need a common solution for various reservation requirements: 1) calendar booking; 2) hotel/room booking;3) meeting
+room booking; 4 parking lot booking; 5) etc. Repeatedly build ing features for these requirements 1S a waste
+of time and resources. We should have a common solution that can be used by all teams.
 
 ## Guide-level explanation
 
-[guide-level-explanation]: #guide-level-explanation
+## Service interface
 
-Explain the proposal as if it was already included in the language and you were teaching it to another Rust programmer.
-That generally means:
+We would use gRPC as a service interface. Be low is the proto definition:
 
-- Introducing new named concepts.
-- Explaining the feature largely in terms of examples.
-- Explaining how Rust programmers should *think* about the feature, and how it should impact the way they use Rust. It
-  should explain the impact as concretely as possible.
-- If applicable, provide sample error messages, deprecation warnings, or migration guidance.
-- If applicable, describe the differences between teaching this to existing Rust programmers and new Rust programmers.
-- Discuss how this impacts the ability to read, understand, and maintain Rust code. Code is read and modified far more
-  often than written; will the proposed feature make code easier to maintain?
+```protobuf
+syntax = 'proto3';
 
-For implementation-oriented RFCs (e.g. for compiler internals), this section should focus on how compiler contributors
-should think about the change, and give examples of its concrete impact. For policy RFCs, this section should provide an
-example-driven introduction to the policy, and explain its impact in concrete terms.
+enum ReservationStatus {
+  UNKNOWN = 0;
+  PENDING = 1;
+  CONFIRMED = 2;
+  BLOCKED = 3;
+}
+
+message Reservation {
+  string id = 1;
+  string user_id = 2;
+  ReservationStatus status = 3;
+
+  string resource_id = 4;
+  google.protobuf.Timestamp start = 5;
+  google.protobuf.Timestamp end = 6;
+
+  string note = 7;
+}
+
+message ReserveRequest {
+  Reservation reservation = 1;
+}
+
+message ReserveResponse {
+  Reservation reservation = 1;
+}
+
+message UpdateRequest {
+  string note = 1;
+}
+
+message UpdateResponse {
+  Reservation reservation = 1;
+}
+
+message ConfirmRequest {
+  string id = 1;
+}
+
+message ConfirmResponse {
+  Reservation reservation = 1;
+}
+
+message CancelRequest {
+  string id = 1;
+}
+
+message CancelResponse {
+  Reservation reservation = 1;
+}
+
+message GetRequest {
+  string id = 1;
+}
+
+message GetResponse {
+  Reservation reservation = 1;
+}
+
+message QueryRequest {
+  string resource_id = 1;
+  string user_id = 2;
+  ReservationStatus status = 3;
+  google.protobuf.Timestamp start = 4;
+  google. protobuf.Timestamp end = 5;
+}
+
+message ListenRequest {}
+
+enum ReservationUpdateType {
+  UNKNOWN = 0;
+  CREATE = 1;
+  UPDATE = 2;
+  DELETE = 3;
+}
+
+message ListenResponse {
+  ReservationUpdateType op = 1;
+  Reservation reservation = 2;
+}
+
+service ReservationService {
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
+  rpc Update(UpdateRequest) returns (UpdateResponse);
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Query(QueryRequest) returns (stream Reservation);
+  rpc Listen(ListenRequest) returns (stream Reservation);
+}
+```
+
+## Database schema
+
+```postgresql
+CREATE SCHEMA rsvp;
+CREATE TYPE rsvp.reservation_status AS ENUM
+    ('unknown','pending', 'confirmed', 'blocked');
+CREATE TYPE rsvp.reservation_update_type AS ENUM
+    ('unknown','create', 'update', 'delete');
+CREATE TABLE rsvp.reservations
+(
+    id          uuid                    NOT NULL DEFAULT uuid_generate_v4(),
+    user_id     varchar(64)             NOT NULL,
+    status      rsvp.reservation_status NOT NULL DEFAULT 'pending',
+    resource_id varchar(64)             NOT NULL,
+    timespan    tstzrange               NOT NULL,
+    note        text,
+    CONSTRAINT reservations_pkey PRIMARY KEY (id),
+    CONSTRAINT reservations_conflict EXCLUDE USING gist (resource_id WITH =, timespan WITH &&)
+);
+CREATE INDEX reservation_resource_id_idx ON rsvp.reservations (resource_id);
+CREATE INDEX reservation_user_id_idx ON rsvp.reservations (user_id);
+-- query
+CREATE OR REPLACE FUNCTION rsvp.query(user_id text, rid text, during: TSTZRANGE) RETURNS TABLE rsvp.reservations AS
+$$
+
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE rsvp.reservation_changes
+(
+    id             SERIAL                  NOT NULL,
+    reservation_id uuid                    NOT NULL,
+    op             reservation_update_type NOT NULL
+);
+
+-- trigger rsvp.reservations
+CREATE OR REPLACE FUNCTION rsvp.reservation_trigger() RETURNS TRIGGER AS
+$$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO rsvp.reservation_changes (reservation_id, op) VALUES (NEW.id, 'create');
+    ELSIF TG_OP = 'UPDATE' THEN
+        IF OLD.status <> NEW.status THEN
+            INSERT INTO rsvp.reservation_changes (reservation_id, op) VALUES (NEW.id, 'update');
+        END IF;
+    ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO rsvp.reservation_changes (reservation_id, op) VALUES (NEW.id, 'delete');
+    END IF;
+    RETURN NULL;
+END
+$$
+    LANGUAGE plpgsql;
+CREATE TRIGGER reservation_trigger
+    AFTER INSERT OR UPDATE OR DELETE
+    ON rsvp.reservations
+    FOR EACH ROW
+EXECUTE PROCEDURE rsvp.reservation_trigger();
+```
 
 ## Reference-level explanation
 
